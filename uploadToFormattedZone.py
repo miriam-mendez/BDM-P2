@@ -39,27 +39,31 @@ def readIdealistaFiles(sprak, files):
                                   DateType())  # to convert into a date
         df = sprak.read.parquet(hdfs_server + file)
         # Not taking records with columns without the logical key
-        if 'neighborhood' not in df.columns or 'district' not in df.columns:
+        if 'neighborhood' not in df.columns:
             continue
         # Add date column, filter out null values for logical key and convert to rdd
         rdd = df.withColumn("date", convert_to_date_udf(extract_filename_udf(input_file_name())))\
             .filter(col('neighborhood').isNotNull())\
-            .filter(col('district').isNotNull())\
             .rdd
         if flag:
             fullRDD = rdd.cache()
             flag = False
         else:
             fullRDD = fullRDD.union(rdd).cache()
-
+    # print(fullRDD.count())
     uniqueRDD = fullRDD\
         .map(lambda row:(row['propertyCode'], row['date']))\
         .reduceByKey(lambda date1, date2: max(date1, date2))\
         .map(lambda row: ((row[0],row[1]),(row[1])))\
         .cache()
+    # print(uniqueRDD.count())
+    # uniqueRDD.toDF().show()
     finalRDD = fullRDD\
     .map(lambda row: ((row['propertyCode'], row['date']), (row))) \
     .join(uniqueRDD)
+    # print(finalRDD.count())
+    # for i in finalRDD.collect():
+    #     print(i)
     return finalRDD
 
 def readParquetFiles(spark, folder_name):
@@ -80,14 +84,10 @@ def reconIncoming(incRDD, lkpRDD):
     :param lkpRDD:
     :return:
     """
-    mapRDD = incRDD\
-        .map(lambda row: ((row.Nom_Districte, row['Nom_Barri']), row))\
-        .sortByKey()
+    mapRDD = incRDD.map(lambda row: ((row.Nom_Districte, row['Nom_Barri']), row))
     reconRDD = mapRDD\
         .join(lkpRDD) \
         .map(lambda row: ((row[1][1].district_n_reconciled, row[1][1].neighborhood_n_reconciled, row[1][0]['Any']), row))
-    # .map(lambda row: ((row[1][1].district_n_reconciled,row[1][1].neighborhood_n_reconciled,row[1][0]['Any']), row[1][0]))
-        # .groupByKey()
     return reconRDD
 
 def reconRent(rentRDD, lkpRDD):
@@ -110,10 +110,12 @@ def reconIdealista(ideaRDD, lkpRDD):
     :param lkpRDD:
     :return: reconRDD
     """
-    mapRDD = ideaRDD.map(lambda row: ((row[1][0].district, row[1][0].neighborhood),row))
+    # print(ideaRDD.count)
+    mapRDD = ideaRDD.map(lambda row: ((row[1][0].neighborhood),row))
     reconRDD = mapRDD\
         .join(lkpRDD)\
-         .map(lambda row: ((row[1][1][2],row[1][1][5]), row[1][0]))
+         .map(lambda row: ((row[1][1][5]), row[1][0]))
+    print(reconRDD.count())
     return reconRDD
 
 def delete_hdfs_directory(path):
@@ -136,12 +138,12 @@ def getSchemaIdealista(RDD):
     :param RDD:
     :return: df
     """
-    newRDD = RDD.map(lambda x: (x[0][0],x[0][1],x[1][0][0],x[1][0][1], x[1][1][0].price,
+    newRDD = RDD.map(lambda x: (x[0],x[1][1][0].district ,x[1][0][0],x[1][0][1], x[1][1][0].price,
     x[1][1][0].size,x[1][1][0].rooms,x[1][1][0].bathrooms,x[1][1][0].latitude,x[1][1][0].longitude,
     x[1][1][0].operation,x[1][1][0].propertyType,x[1][1][0].floor,x[1][1][0].status,x[1][1][0].hasLift)).cache()
 
     df = newRDD.toDF()
-    column_names = ["district", "neighborhood", "propertyCode", "date", "price", "size", "rooms", "bathrooms",
+    column_names = ["neighborhood", "district", "propertyCode", "date", "price", "size", "rooms", "bathrooms",
                     "latitude", "longitude", "operation", "propertyType", "floor", "status", "hasLift"]
     # Rename columns and assign data types
     for i, column_name in enumerate(column_names):
@@ -185,7 +187,6 @@ def toHDFS(df, path, name):
     """
     records_per_file = int(file_size_bytes / df.rdd.getNumPartitions())
     repartitioned_df = df.coalesce(int(file_size_bytes / records_per_file))
-    # repartitioned_df.show(5)
     repartitioned_df.write \
         .mode("overwrite") \
         .parquet(hdfs_server + path + f"/{name}")
@@ -202,16 +203,22 @@ if __name__ == "__main__":
         .sortByKey()\
         .distinct()\
         .cache()
+    testLkpRDD = lkpRDD \
+        .map(lambda row: ((row.neighborhood), row)) \
+        .sortByKey() \
+        .distinct() \
+        .cache()
 
     # Rconciliation
     incReconRDD = reconIncoming(incomeRDD, mapLkpRDD)
     rentReconRDD = reconRent(rentRDD,mapLkpRDD)
-    idealistaReconRDD = reconIdealista(idealistaRDD, mapLkpRDD).cache()
+    idealistaReconRDD = reconIdealista(idealistaRDD, testLkpRDD).cache()
 
 idealista_df = getSchemaIdealista(idealistaReconRDD)
 income_df = getSchemaIncome(incReconRDD)
 rent_df = getSchemaRent(rentReconRDD)
 delete_hdfs_directory(target_hdfs_path)
+
 toHDFS(idealista_df, target_hdfs_path,"idealista")
 toHDFS(income_df,target_hdfs_path,"income")
 toHDFS(rent_df,target_hdfs_path,"rent")
