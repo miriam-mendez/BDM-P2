@@ -50,20 +50,14 @@ def readIdealistaFiles(sprak, files):
             flag = False
         else:
             fullRDD = fullRDD.union(rdd).cache()
-    # print(fullRDD.count())
     uniqueRDD = fullRDD\
         .map(lambda row:(row['propertyCode'], row['date']))\
         .reduceByKey(lambda date1, date2: max(date1, date2))\
         .map(lambda row: ((row[0],row[1]),(row[1])))\
         .cache()
-    # print(uniqueRDD.count())
-    # uniqueRDD.toDF().show()
     finalRDD = fullRDD\
     .map(lambda row: ((row['propertyCode'], row['date']), (row))) \
     .join(uniqueRDD)
-    # print(finalRDD.count())
-    # for i in finalRDD.collect():
-    #     print(i)
     return finalRDD
 
 def readParquetFiles(spark, folder_name):
@@ -110,12 +104,10 @@ def reconIdealista(ideaRDD, lkpRDD):
     :param lkpRDD:
     :return: reconRDD
     """
-    # print(ideaRDD.count)
     mapRDD = ideaRDD.map(lambda row: ((row[1][0].neighborhood),row))
     reconRDD = mapRDD\
         .join(lkpRDD)\
          .map(lambda row: ((row[1][1][5]), row[1][0]))
-    print(reconRDD.count())
     return reconRDD
 
 def delete_hdfs_directory(path):
