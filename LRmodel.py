@@ -5,7 +5,6 @@ from pyspark.sql import SparkSession
 from hdfs import InsecureClient
 from uploadToExploitationZone import getIdealistaRDD
 
-
 hdfs_cli = InsecureClient("http://10.4.41.46:9870", user="bdm")
 subdir = '/user/bdm/formatted_zone/idealista'
 files = [f"{subdir}/{name}" for name in hdfs_cli.list('/user/bdm/formatted_zone/idealista')]

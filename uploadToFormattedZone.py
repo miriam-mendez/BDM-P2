@@ -214,13 +214,13 @@ if __name__ == "__main__":
     rentReconRDD = reconRent(rentRDD,mapLkpRDD)
     idealistaReconRDD = reconIdealista(idealistaRDD, testLkpRDD).cache()
 
-idealista_df = getSchemaIdealista(idealistaReconRDD)
-income_df = getSchemaIncome(incReconRDD)
-rent_df = getSchemaRent(rentReconRDD)
-delete_hdfs_directory(target_hdfs_path)
+    idealista_df = getSchemaIdealista(idealistaReconRDD)
+    income_df = getSchemaIncome(incReconRDD)
+    rent_df = getSchemaRent(rentReconRDD)
+    delete_hdfs_directory(target_hdfs_path)
 
-toHDFS(idealista_df, target_hdfs_path,"idealista")
-toHDFS(income_df,target_hdfs_path,"income")
-toHDFS(rent_df,target_hdfs_path,"rent")
+    toHDFS(idealista_df, target_hdfs_path,"idealista")
+    toHDFS(income_df,target_hdfs_path,"income")
+    toHDFS(rent_df,target_hdfs_path,"rent")
 
-spark.stop()
+    spark.stop()
